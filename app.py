@@ -83,10 +83,11 @@ OPENALEX_API = "https://api.openalex.org/works"
 
 # University mappings to OpenAlex institution IDs and display names
 UNIVERSITY_IDS = {
-    "UC Berkeley": "I95457486",   # University of California, Berkeley
-    "Stanford": "I4200000001",    # Stanford University
-    "MIT": "I127595847",          # Massachusetts Institute of Technology
-    "Harvard": "I136199984"       # Harvard University
+    "UC Berkeley": ["I95457486", "I148283060"],   # UC Berkeley + Lawrence Berkeley National Lab
+    "UC Berkeley & UCSF": ["I95457486", "I148283060", "I180670191"], # UC Berkeley + LBL + UCSF
+    "Stanford": ["I4200000001"],    # Stanford University
+    "MIT": ["I127595847"],          # Massachusetts Institute of Technology
+    "Harvard": ["I136199984"]       # Harvard University
 }
 
 UNIVERSITY_DISPLAY_NAMES = {
@@ -129,6 +130,15 @@ def get_recent_papers(university_id, author_names, days_back, university_display
     if not authors_list:
         return pd.DataFrame(), []
     
+    # Handle university_id being a list or string
+    if isinstance(university_id, str):
+        university_ids = [university_id]
+    else:
+        university_ids = university_id
+    
+    # Create pipe-separated string for OR query
+    institutions_str = "|".join(university_ids)
+
     # STEP 1: Get Author IDs
     author_ids = []
     missing_authors = []
@@ -150,7 +160,7 @@ def get_recent_papers(university_id, author_names, days_back, university_display
             # Using 'last_known_institutions.id' (plural) as per OpenAlex API
             # Search for the Last Name to cast a wide net, then filter
             params = {
-                'filter': f'display_name.search:{last_name},last_known_institutions.id:{university_id}',
+                'filter': f'display_name.search:{last_name},last_known_institutions.id:{institutions_str}',
                 'per_page': 50
             }
             
@@ -198,7 +208,7 @@ def get_recent_papers(university_id, author_names, days_back, university_display
         # Filter by author IDs, publication date, and institution
         filter_str = (
             f"authorships.author.id:{author_ids_str},"
-            f"authorships.institutions.id:{university_id},"
+            f"authorships.institutions.id:{institutions_str},"
             f"publication_date:>{start_date}"
         )
         
@@ -234,7 +244,7 @@ def get_recent_papers(university_id, author_names, days_back, university_display
         
         # Check if any author on the paper matches our VIP list
         for authorship in authorships:
-            auth_name = authorship.get('author', {}).get('display_name', '')
+            auth_name = authorship.get('author', {}).get('display_name') or ''
             if any(vip_name.lower() in auth_name.lower() for vip_name in VIP_AUTHORS):
                 is_vip_paper = True
                 break
